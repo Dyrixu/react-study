@@ -3,7 +3,7 @@
 
 ## 类组件中的state
 
-### setState用法
+### 一、setState用法
 
     setState(obj, callback)
     1.第一个参数 obj
@@ -12,7 +12,7 @@
     2.第二个参数 callback
         callback为一个函数，函数执行上下文中可以获取当前setState更新后的值，可以作为以来state变化的副作用函数
 
-### 触发setState,React底层都做了哪些事
+### 二、触发setState,React底层都做了哪些事
     
 
 
