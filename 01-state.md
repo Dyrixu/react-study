@@ -16,10 +16,12 @@
 
 * 首先，setState会产生当前更新的优先级（老版本用 expirationTime , 新版本用 lane ）
 * 其次，React会从 fiber Root 根部fiber向下调和子节点，调和阶段将对比发生更新的地方，更新对比 expirationTime, 找到发生更新的组件，合并 state，然后出发 render 函数，得到新的UI视图，完成 render 阶段
-* 接下来懂啊 commit 阶段，commit 阶段替换真实 DOM，完成此次更新流程
+* 接下来到 commit 阶段，commit 阶段替换真实 DOM，完成此次更新流程
 * 在 commit 阶段，会执行 setState 中的 callback 函数，到此为止完成了一次 setState 的全过程
 
 触发setState -> 计算expirationTime -> 更新调度，调和fiber树 -> 合并state，执行fiber -> 替换真实DOM -> 执行callback函数
+
+
 
 #### 类组件如何限制state更新视图
 * pureComponent 可以对 state 和 props 进行浅比较，如果没有发生变化那么组件不更新
@@ -179,3 +181,81 @@ __flushSync补充说明__: flushSync 在同步条件下，会合并之前的 set
 flushSync 中的 setState __>__ 正常直行上下文中的 setState __>__ setTimeout, promise 中的setState
 
 ## 函数组件中的state
+
+### useState用法
+>  [ ①state , ②dispatch ] = useState(③initData)
+* ①state，目的是提供给UI，作为渲染视图的数据源
+* ②dispatch，改变 state 的函数
+* ③initData，state的初始值，有两种情况，1、非函数，将作为 state 的初始值，2、第二种情况是函数，返回值作为 useState 的初始值
+
+__initData 为非函数的情况__
+```
+/* 此时将把 0 作为初使值 */
+const [ number , setNumber ] = React.useState(0)
+```
+__initData 为函数的情况__
+```
+ const [ number , setNumber ] = React.useState(()=>{
+       /*  props 中 a = 1 state 为 0-1 随机数 ， a = 2 state 为 1 -10随机数 ， 否则，state 为 1 - 100 随机数   */
+       if(props.a === 1) return Math.random() 
+       if(props.a === 2) return Math.ceil(Math.random() * 10 )
+       return Math.ceil(Math.random() * 100 ) 
+    })
+```
+
+__对于dispatch也有两种情况__
+* 非函数，直接作为新的值，赋值给 state
+* 函数，如果 dispatch 是一个函数，参数是上一次返回最新的 state，返回值作为新的 state
+
+__如何监听state__
+使用另一个hooks，useEffect()
+
+__dispatch更新特点__
+在函数组件中，dispatch 更新效果和类组件是一样的效果，但是 useState 有一点不同，当调用 state 的函数 dispatch。在本次函数执行上下文中，是获取不到最新的state的值的，例如：
+```
+const [ number , setNumber ] = React.useState(0)
+const handleClick = ()=>{
+    ReactDOM.flushSync(()=>{
+        setNumber(2) 
+        console.log(number) 
+    })
+    setNumber(1) 
+    console.log(number)
+    setTimeout(()=>{
+        setNumber(3) 
+        console.log(number)
+    })   
+}
+```
+__结果： 0 0 0__
+
+原因很简单，函数组件更新就是函数执行，在函数一次执行过程中，函数内部所有变量重新声明，所以改变的 state 只有在下一次函数执行时才会被更新,所以在同一个函数执行上下文中 number 一直是 0 
+
+__useState注意事项__
+在使用 useState 中的 dispatch 更新 state 的时候,千万不要传入相同的 state , 这样不会更新视图
+ ```
+ export default function Index(){
+    const [ state  , dispatchState ] = useState({ name:'alien' })
+    const  handleClick = ()=>{ // 点击按钮，视图没有更新。
+        state.name = 'Alien'
+        dispatchState(state) // 直接改变 `state`，在内存中指向的地址相同。
+    }
+    return <div>
+         <span> { state.name }</span>
+        <button onClick={ handleClick }  >changeName++</button>
+    </div>
+}
+ ```
+
+ 在 useState 的 dispatchState 处理逻辑中,会浅比较两次的 state ,发现 state 相同, 那么就不会开启更新调度任务, demo 中两次 state 都指向了相同的内存空间，所以默认 state 相等，就不会发生视图更新
+
+ 解决方法：把 dispatchState(state) 改成 dispatchState({...state}),浅拷贝了对象，重新申请了一个内存空间
+
+__类组件中的 setState 和函数组件中的 useState 有什么异同 ？__
+
+相同点：
+* 从原理出发，setState 和 useState 更新视图，底层都调用了 scheduleUpdateOnFiber 方法，而且事件驱动情况下都有批量更新原则
+不同点：
+* 在不是 pureComponent 组件模式下， setState不会浅比较两次 state 的值，在没有其他优化手段情况下，只要调用就会更新。但是，useState 中的dispatch 会默认比较两次的 state 是否相同，不同才会更新组件
+* setState 有专门监听函数变化的 callback，可以获取最新的state，useState 只能通 useEffect 来执行 state 变化引起的副作用
+* setState 在底层逻辑处理上主要是新老 state 进行合并处理，而 useState 更倾向于重新赋值
