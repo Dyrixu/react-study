@@ -227,6 +227,131 @@ export default ()=>{
 ### ref实现组件通信
 __① 类组件 ref__
 
+类组件可以直接通过 ref 获取组件实例，实现组件通信
+
+```
+import React, { useRef, useState } from 'react'
+
+class Son extends React.Component {
+    state = {
+        sonMsg: '',
+        fatherMsg: ''
+    }
+
+    sonClick = () => {
+        this.props.toFather(this.state.sonMsg)
+    }
+    toSon = (msg) => {
+        this.setState({
+            fatherMsg: msg
+        })
+    }
+    render() {
+        return (
+            <div>
+                <h1>子组件</h1>
+                <input type="text" onChange={(msg) => this.setState({ sonMsg: msg.target.value })} />
+                <button onClick={this.sonClick}>通知父亲组件</button>
+                <div>父组件说：{ this.state.fatherMsg }</div>
+            </div>
+        )
+    }
+}
+
+export default function Father() {
+    const [fatherMsg, setFatherMsg] = useState('')
+    const [sonMsg, setSonMsg] = useState('')
+    const sonInstance = useRef(null)
+
+
+    const fatherClick = () => {
+        sonInstance.current.toSon(fatherMsg)
+    }
+
+    const setSon = (msg) => {
+        setSonMsg(msg)
+    }
+    return (
+        <div>
+            <h1>父亲组件</h1>
+            <input type="text" onChange={(msg) => setFatherMsg(msg.target.value)} />
+            <button onClick={fatherClick}>通知子组件</button>
+            <div>子组件说：{sonMsg}</div>
+            <Son ref={sonInstance} toFather={setSon} />
+        </div>
+    )
+}
+```
+流程分析：
+
+* 子组件暴露 toSon 方法供父组件使用，父组件通过 sonInstance.current.toSon(fatherMsg) 调用显示子组件内容
+* 父组件提供给子组件 toFather 方法，子组件通过 this.props.toFather(this.state.sonMsg) 调用，改变父组件内容，实现双向通信
+
 __② 函数组件 forwardRef + useImperativeHandle__
+
+函数组件本身没有实例，React hooks 提供了useImperativeHandle 
+
+useImperativeHandle 接受三个参数：
+* 第一个参数：ref： 接受 forWardRef 传递过来的 ref
+* 第二个参数：createHandle： 处理函数，返回值暴露给父组件的 ref 对象
+* 第三个参数：deps：依赖项 deps，依赖项更改形成新的 ref 对象
+
+
+forwardRef + useImperativeHandle 可以完全让函数组件也能流畅的使用 ref 通信
+[流程图](https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/59238390306849e89069e6a4bb6ded9d~tplv-k3u1fbpfcp-watermark.awebp)
+
+```
+import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+
+const Son = (props, ref) => {
+    const inputRef = useRef(null)
+    const [inputValue, setInputValue] = useState('')
+    const handleChange = (e) => {
+        setInputValue(e.target.value)
+    }
+    useImperativeHandle(ref, () => {
+        const handleRefs = {
+            onFocus() {
+                inputRef.current.focus()
+            },
+            onChangeValue(value) {
+                setInputValue(value)
+            }
+        }
+        return handleRefs
+    })
+    return (
+        <div>
+            <input type="text" ref={inputRef} value={inputValue} onChange={handleChange} />
+        </div>
+    )
+}
+
+const ForwardSon = forwardRef(Son)
+
+class Index extends React.Component {
+    cur = null
+    handleClick = () => {
+        const { onFocus, onChangeValue } = this.cur
+        onFocus()
+        onChangeValue('let\'s learn React')
+    }
+    render() {
+        return (
+            <div>
+                <ForwardSon ref={cur => this.cur = cur} />
+                <button onClick={this.handleClick}>操控子组件</button>
+            </div>
+        )
+    }
+}
+
+export default Index
+```
+流程：
+* 父组件用 ref 标记子组件，由于子组件 Son 是函数组件，所以没有实例，所以用 forwardRef 转发 Ref
+* 子组件用 useImperativeHandle 接收父组件的 ref，将 input 的聚焦方法 onFocus 和 改变 input 值的 onChangeValue 方法合并传递给 ref
+* 父组件通过 ref 下的 onFocus 和 onChangeValue 控制子组件
+
 
 ### 函数组件缓存数据
